@@ -1,0 +1,15 @@
+{
+  "files": {
+    "main.css": "/ShakeWizardBuild/static/css/main.f855e6bc.css",
+    "main.js": "/ShakeWizardBuild/static/js/main.74e77a99.js",
+    "static/js/453.75ea827f.chunk.js": "/ShakeWizardBuild/static/js/453.75ea827f.chunk.js",
+    "index.html": "/ShakeWizardBuild/index.html",
+    "main.f855e6bc.css.map": "/ShakeWizardBuild/static/css/main.f855e6bc.css.map",
+    "main.74e77a99.js.map": "/ShakeWizardBuild/static/js/main.74e77a99.js.map",
+    "453.75ea827f.chunk.js.map": "/ShakeWizardBuild/static/js/453.75ea827f.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.f855e6bc.css",
+    "static/js/main.74e77a99.js"
+  ]
+}
