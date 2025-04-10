@@ -1,6 +1,7 @@
 {
+  "homepage": "https://jsv7.github.io/ShakeWizardBuild/",
   "name": "shakewizardbuild",
-  "version": "0.1.0",
+  "version": "0.10.8",
   "private": true,
   "dependencies": {
     "@testing-library/dom": "^10.4.0",
@@ -14,10 +15,11 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "start": "node scripts/start.js",
+    "predeploy": "npm run build",
+    "deploy": "gh-pages -d build",
+    "build": "node scripts/build.js",
+    "test": "node scripts/test.js"
   },
   "eslintConfig": {
     "extends": [
@@ -36,5 +38,11 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
+    "@telegram-apps/sdk": "^3.7.1",
+    "@vkruglikov/react-telegram-web-app": "^2.1.9",
+    "gh-pages": "^6.3.0",
+    "react-loader-spinner": "^6.1.6"
   }
 }
