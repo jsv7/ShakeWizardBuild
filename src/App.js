@@ -45,10 +45,10 @@ function App() {
   const [isHapticMedium, setIsHapticMedium] = useState(false);
 
   const { unityProvider, addEventListener, removeEventListener, loadingProgression, isLoaded  } = useUnityContext({
-    loaderUrl: "assets/WEBGL.loader.js",
-    dataUrl: "assets/WEBGL.data.unityweb",
-    frameworkUrl: "assets/WEBGL.framework.js.unityweb",
-    codeUrl: "assets/WEBGL.wasm.unityweb",
+    loaderUrl: "Assets/WEBGL.loader.js",
+    dataUrl: "Assets/WEBGL.data.unityweb",
+    frameworkUrl: "Assets/WEBGL.framework.js.unityweb",
+    codeUrl: "Assets/WEBGL.wasm.unityweb",
   });
   const [impactOccurred, notificationOccurred, selectionChanged] =
     useHapticFeedback();

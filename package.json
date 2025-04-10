@@ -15,11 +15,12 @@
     "web-vitals": "^2.1.4"
   },
   "scripts": {
-    "start": "node scripts/start.js",
+    "start": "react-scripts start",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d build",
-    "build": "node scripts/build.js",
-    "test": "node scripts/test.js"
+    "build": "react-scripts build",
+    "test": "react-scripts test",
+    "eject": "react-scripts eject"
   },
   "eslintConfig": {
     "extends": [
@@ -40,9 +41,6 @@
     ]
   },
   "devDependencies": {
-    "@telegram-apps/sdk": "^3.7.1",
-    "@vkruglikov/react-telegram-web-app": "^2.1.9",
-    "gh-pages": "^6.3.0",
-    "react-loader-spinner": "^6.1.6"
+    "gh-pages": "^6.3.0"
   }
 }
