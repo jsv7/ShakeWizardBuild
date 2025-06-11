@@ -25,14 +25,14 @@ async function initTg() {
     if (await isTMA()) {
         init(); // init tg app
 
-        if (viewport.mount.isAvailable()) {
-            await viewport.mount();
-            viewport.expand(); // first it would be better to expand
-        }
-
-        if (viewport.requestFullscreen.isAvailable()) {
-            await viewport.requestFullscreen(); // then request full screen mode
-        }
+        // if (viewport.mount.isAvailable()) {
+        //     await viewport.mount();
+        //     viewport.expand(); // first it would be better to expand
+        // }
+        //
+        // if (viewport.requestFullscreen.isAvailable()) {
+        //     await viewport.requestFullscreen(); // then request full screen mode
+        // }
     }
 }
 
@@ -69,17 +69,6 @@ function App() {
     }, []);
 
    useEffect(() => {
-     const canvas = document.getElementById("root");
-  if (canvas) {
-    const newWidth = canvas.clientWidth;
-    const newHeigth = canvas.clientHeigth;
-
-    // const dpr = window.devicePixelRatio || 1;
-    // canvas.width = window.innerWidth * dpr;
-    // canvas.height = window.innerHeight * dpr;
-    // canvas.style.width = "100vw";
-    // canvas.style.height = "100vh";
-  }
 
 
      addEventListener("HapticSoft", handleHapticSoft);
@@ -111,6 +100,7 @@ function App() {
         top: 0,
         left: 0,
         }}
+        devicePixelRatio={window.devicePixelRatio}
          unityProvider={unityProvider} />
     </Fragment>
   );
