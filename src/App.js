@@ -1,109 +1,133 @@
-
 import './App.css';
 import React, { Fragment, useState, useCallback, useEffect } from "react";
 import { Unity, useUnityContext } from "react-unity-webgl";
-import { useHapticFeedback } from '@vkruglikov/react-telegram-web-app';
-
-import { viewport, init, isTMA } from "@telegram-apps/sdk";
-
+import bridge from '@vkontakte/vk-bridge';
 import { RotatingLines } from "react-loader-spinner";
 
 function Loader() {
-  return (
-    <RotatingLines
-      strokeColor="green"
-      strokeWidth="5"
-      animationDuration="30"
-      width="96"
-      visible={true}
-
-    />
-  )
+    return (
+        <RotatingLines
+            strokeColor="green"
+            strokeWidth="5"
+            animationDuration="30"
+            width="96"
+            visible={true}
+        />
+    )
 }
 
-async function initTg() {
-    if (await isTMA()) {
-        init(); // init tg app
+// Initialize VK Bridge
+async function initVK() {
+    try {
+        // Initialize VK Bridge
+        await bridge.send('VKWebAppInit');
+        console.log('VK Bridge initialized successfully');
 
-        // if (viewport.mount.isAvailable()) {
-        //     await viewport.mount();
-        //     viewport.expand(); // first it would be better to expand
-        // }
-        //
-        // if (viewport.requestFullscreen.isAvailable()) {
-        //     await viewport.requestFullscreen(); // then request full screen mode
-        // }
+        // Get user info
+        const userInfo = await bridge.send('VKWebAppGetUserInfo');
+        console.log('User info:', userInfo);
+
+        // Set view settings for better mobile experience
+        await bridge.send('VKWebAppSetViewSettings', {
+            status_bar_style: 'light',
+            action_bar_color: '#000000'
+        });
+
+    } catch (error) {
+        console.error('VK Bridge initialization failed:', error);
     }
 }
 
+// Initialize VK on app start
 (async () => {
-    await initTg();
+    await initVK();
 })();
 
 function App() {
-  const [isHapticSoft, setIsHapticSoft] = useState(false);
-  const [isHapticMedium, setIsHapticMedium] = useState(false);
+    const [userInfo, setUserInfo] = useState(null);
 
-  const { unityProvider, addEventListener, removeEventListener, loadingProgression, isLoaded  } = useUnityContext({
-    loaderUrl: "Assets/WEBGL.loader.js",
-    dataUrl: "Assets/WEBGL.data.unityweb",
-    frameworkUrl: "Assets/WEBGL.framework.js.unityweb",
-    codeUrl: "Assets/WEBGL.wasm.unityweb",
-  });
-  const [impactOccurred, notificationOccurred, selectionChanged] =
-    useHapticFeedback();
+    const { unityProvider, addEventListener, removeEventListener, loadingProgression, isLoaded } = useUnityContext({
+        loaderUrl: "Assets/WEBGL.loader.js",
+        dataUrl: "Assets/WEBGL.data.unityweb",
+        frameworkUrl: "Assets/WEBGL.framework.js.unityweb",
+        codeUrl: "Assets/WEBGL.wasm.unityweb",
+    });
 
+    // VK Haptic feedback functions
     function hapticSoft() {
-      notificationOccurred('success');
+        bridge.send('VKWebAppTapticNotificationOccurred', { type: 'success' })
+            .catch(err => console.log('Haptic feedback not supported:', err));
     }
-  function hapticMedium() {
-    notificationOccurred('error');
-  }
 
-  const handleHapticSoft = useCallback(() => {
-     hapticSoft();
-   }, []);
+    function hapticMedium() {
+        bridge.send('VKWebAppTapticImpactOccurred', { style: 'medium' })
+            .catch(err => console.log('Haptic feedback not supported:', err));
+    }
 
-   const handleHapticMedium = useCallback(() => {
-      hapticMedium();
+    const handleHapticSoft = useCallback(() => {
+        hapticSoft();
     }, []);
 
-   useEffect(() => {
+    const handleHapticMedium = useCallback(() => {
+        hapticMedium();
+    }, []);
 
+    // Share score function for VK
+    const shareScore = useCallback(async (score) => {
+        try {
+            await bridge.send('VKWebAppShare', {
+                link: window.location.href
+            });
+        } catch (error) {
+            console.error('Share failed:', error);
+        }
+    }, []);
 
-     addEventListener("HapticSoft", handleHapticSoft);
-     addEventListener("HapticMedium", handleHapticMedium);
+    useEffect(() => {
+        // Get user info on component mount
+        bridge.send('VKWebAppGetUserInfo')
+            .then(user => setUserInfo(user))
+            .catch(err => console.error('Failed to get user info:', err));
 
-     return () => {
-       removeEventListener("HapticSoft", handleHapticSoft);
-       removeEventListener("HapticMedium", handleHapticMedium);
-     };
-   }, [addEventListener, removeEventListener, handleHapticSoft]);
+        // Unity event listeners
+        addEventListener("HapticSoft", handleHapticSoft);
+        addEventListener("HapticMedium", handleHapticMedium);
 
-  return (
-    <Fragment >
-     <div className="center">
-          <Loader />
-          {!isLoaded && (
-           <div className="loading-overlay">
-             <div className="loading-spinner"></div>
-             <p>Loading: {Math.round(loadingProgression * 100)}%</p>
-           </div>
-         )}
-     </div>
+        // You can add more Unity -> VK integrations here
+        addEventListener("ShareScore", shareScore);
 
-      <Unity
-      style ={{
-        width: "100vw",   // Full viewport width
-        height: "100vh",  // Full viewport height
-        position: "absolute",
-        top: 0,
-        left: 0,
-        }}
-        devicePixelRatio={window.devicePixelRatio}
-         unityProvider={unityProvider} />
-    </Fragment>
-  );
+        return () => {
+            removeEventListener("HapticSoft", handleHapticSoft);
+            removeEventListener("HapticMedium", handleHapticMedium);
+            removeEventListener("ShareScore", shareScore);
+        };
+    }, [addEventListener, removeEventListener, handleHapticSoft, handleHapticMedium, shareScore]);
+
+    return (
+        <Fragment>
+            <div className="center">
+                <Loader />
+                {!isLoaded && (
+                    <div className="loading-overlay">
+                        <div className="loading-spinner"></div>
+                        <p>Loading: {Math.round(loadingProgression * 100)}%</p>
+                    </div>
+                )}
+            </div>
+
+            <Unity
+                style={{
+                    width: "100vw",   // Full viewport width
+                    height: "100vh",  // Full viewport height
+                    position: "absolute",
+                    top: 0,
+                    left: 0,
+                }}
+                devicePixelRatio={window.devicePixelRatio}
+                unityProvider={unityProvider}
+            />
+        </Fragment>
+    );
 }
 
 export default App;
