@@ -1,16 +1,17 @@
 // src/firebase/FirebaseService.js
 import { auth, db } from './config';
-import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc, collection, serverTimestamp, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { doc, setDoc, collection, serverTimestamp, getDocs, query, orderBy, limit, getDoc } from 'firebase/firestore';
 
 class FirebaseService {
     constructor() {
         this.currentUser = null;
+        this.vkUser = null;
         this.isInitialized = false;
-        this.initializeAuth();
+        this.authMethod = 'anonymous'; // 'anonymous' or 'vk'
     }
 
-    async initializeAuth() {
+    async initializeAuth(vkUserInfo = null) {
         try {
             // Listen for auth state changes
             onAuthStateChanged(auth, (user) => {
@@ -18,10 +19,12 @@ class FirebaseService {
                 console.log('Auth state changed:', user ? 'Authenticated' : 'Not authenticated');
             });
 
-            // Sign in anonymously if not already signed in
-            if (!auth.currentUser) {
-                await signInAnonymously(auth);
-                console.log('Signed in anonymously via React');
+            // If VK user info is provided, use VK authentication
+            if (vkUserInfo && vkUserInfo.id) {
+                await this.signInWithVK(vkUserInfo);
+            } else {
+                // Fallback to anonymous authentication
+                await this.signInAnonymously();
             }
 
             this.isInitialized = true;
@@ -29,6 +32,75 @@ class FirebaseService {
         } catch (error) {
             console.error('Firebase Auth initialization failed:', error);
             return false;
+        }
+    }
+
+    async signInWithVK(vkUserInfo) {
+        try {
+            this.vkUser = vkUserInfo;
+            this.authMethod = 'vk';
+
+            // Create a custom user ID based on VK user ID
+            const vkUserId = `vk_${vkUserInfo.id}`;
+
+            // For WebGL, we'll use anonymous auth but store VK user data
+            // This avoids the complexity of custom tokens in a web environment
+            const result = await signInAnonymously(auth);
+            this.currentUser = result.User;
+
+            // Store VK user information in Firestore
+            await this.saveVKUserProfile(vkUserInfo);
+
+            console.log(`Authenticated with VK user: ${vkUserInfo.first_name} ${vkUserInfo.last_name} (ID: ${vkUserInfo.id})`);
+            return true;
+        } catch (error) {
+            console.error('VK authentication failed:', error);
+            // Fallback to anonymous
+            await this.signInAnonymously();
+            return false;
+        }
+    }
+
+    async signInAnonymously() {
+        try {
+            this.authMethod = 'anonymous';
+            const result = await signInAnonymously(auth);
+            this.currentUser = result.user;
+            console.log('Signed in anonymously via React');
+            return true;
+        } catch (error) {
+            console.error('Anonymous sign-in failed:', error);
+            return false;
+        }
+    }
+
+    async saveVKUserProfile(vkUserInfo) {
+        if (!this.currentUser) return;
+
+        try {
+            const userProfileData = {
+                vkUserId: vkUserInfo.id,
+                firstName: vkUserInfo.first_name || '',
+                lastName: vkUserInfo.last_name || '',
+                photoUrl: vkUserInfo.photo_200 || vkUserInfo.photo_100 || '',
+                city: vkUserInfo.city?.title || '',
+                country: vkUserInfo.country?.title || '',
+                sex: vkUserInfo.sex || 0,
+                bdate: vkUserInfo.bdate || '',
+                timezone: vkUserInfo.timezone || 0,
+                language: vkUserInfo.language || 'ru',
+                lastLoginAt: serverTimestamp(),
+                platform: 'WebGL-VK',
+                authMethod: 'vk'
+            };
+
+            // Save to Firestore using Firebase UID but include VK data
+            const userDocRef = doc(db, 'players', this.getUserId());
+            await setDoc(userDocRef, userProfileData, { merge: true });
+
+            console.log('VK user profile saved to Firestore');
+        } catch (error) {
+            console.error('Failed to save VK user profile:', error);
         }
     }
 
@@ -51,14 +123,27 @@ class FirebaseService {
                 playerChoices: runData.playerChoices || {},
                 gameVersion: runData.gameVersion || "web-build",
                 timestamp: serverTimestamp(),
-                platform: "WebGL"
+                platform: "WebGL",
+                authMethod: this.authMethod,
+                // Add VK user info if available
+                ...(this.vkUser && {
+                    vkUserId: this.vkUser.id,
+                    playerName: `${this.vkUser.first_name} ${this.vkUser.last_name}`.trim()
+                })
             };
 
-            // Create document name based on timestamp
-            const runDocumentName = new Date().toISOString().replace(/[:.]/g, '-');
+            // Create document name based on timestamp (same format as Unity)
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            const runDocumentName = `${year}-${month}-${day}_${hours}-${minutes}-${seconds}`;
 
             // Save to Firestore
-            const userRunsRef = collection(db, 'players', this.currentUser.uid, 'runs');
+            const userRunsRef = collection(db, 'players', this.getUserId(), 'runs');
             const runDocRef = doc(userRunsRef, runDocumentName);
 
             await setDoc(runDocRef, firestoreData);
@@ -78,7 +163,7 @@ class FirebaseService {
         }
 
         try {
-            const userRunsRef = collection(db, 'players', this.currentUser.uid, 'runs');
+            const userRunsRef = collection(db, 'players', this.getUserId(), 'runs');
             const q = query(userRunsRef, orderBy('timestamp', 'desc'), limit(10));
             const querySnapshot = await getDocs(q);
 
@@ -87,10 +172,17 @@ class FirebaseService {
                 runs.push({ id: doc.id, ...doc.data() });
             });
 
+            // Get user profile data
+            const userDocRef = doc(db, 'players', this.getUserId());
+            const userDoc = await getDoc(userDocRef);
+            const userProfile = userDoc.exists() ? userDoc.data() : {};
+
             return {
                 totalRuns: runs.length,
                 recentRuns: runs,
-                bestScore: runs.length > 0 ? Math.max(...runs.map(r => r.score)) : 0
+                bestScore: runs.length > 0 ? Math.max(...runs.map(r => r.score)) : 0,
+                userProfile: userProfile,
+                vkUser: this.vkUser
             };
         } catch (error) {
             console.error('Failed to get player stats:', error);
@@ -99,11 +191,39 @@ class FirebaseService {
     }
 
     getUserId() {
+        // Use Firebase UID (which is consistent for anonymous users)
         return this.currentUser?.uid || null;
+    }
+
+    getVKUserId() {
+        // Get the original VK user ID
+        return this.vkUser?.id || null;
+    }
+
+    getDisplayName() {
+        if (this.vkUser) {
+            return `${this.vkUser.first_name} ${this.vkUser.last_name}`.trim();
+        }
+        return 'Anonymous Player';
     }
 
     isAuthenticated() {
         return this.currentUser !== null;
+    }
+
+    isVKAuthenticated() {
+        return this.authMethod === 'vk' && this.vkUser !== null;
+    }
+
+    getAuthInfo() {
+        return {
+            isAuthenticated: this.isAuthenticated(),
+            authMethod: this.authMethod,
+            userId: this.getUserId(),
+            vkUserId: this.getVKUserId(),
+            displayName: this.getDisplayName(),
+            isVK: this.isVKAuthenticated()
+        };
     }
 }
 
