@@ -4,13 +4,14 @@
   "version": "0.10.8",
   "private": true,
   "dependencies": {
-    "@vkontakte/vk-bridge": "^2.14.2",
-    "@vkontakte/vkui": "^6.4.0",
-    "@vkontakte/icons": "^2.74.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
     "@testing-library/user-event": "^13.5.0",
+    "@vkontakte/icons": "^2.74.0",
+    "@vkontakte/vk-bridge": "^2.14.2",
+    "@vkontakte/vkui": "^6.4.0",
+    "firebase": "^10.14.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-loader-spinner": "^6.1.6",
@@ -46,7 +47,7 @@
     ]
   },
   "devDependencies": {
-    "gh-pages": "^6.3.0",
-    "@vkontakte/vk-miniapps-deploy": "^1.0.0"
+    "@vkontakte/vk-miniapps-deploy": "^1.0.0",
+    "gh-pages": "^6.3.0"
   }
 }

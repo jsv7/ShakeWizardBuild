@@ -3,6 +3,7 @@ import React, { Fragment, useState, useCallback, useEffect } from "react";
 import { Unity, useUnityContext } from "react-unity-webgl";
 import bridge from '@vkontakte/vk-bridge';
 import { RotatingLines } from "react-loader-spinner";
+import firebaseService from './firebase/FirebaseService';
 
 function Loader() {
     return (
@@ -45,13 +46,32 @@ async function initVK() {
 
 function App() {
     const [userInfo, setUserInfo] = useState(null);
+    const [firebaseReady, setFirebaseReady] = useState(false);
 
-    const { unityProvider, addEventListener, removeEventListener, loadingProgression, isLoaded } = useUnityContext({
+    const { unityProvider, addEventListener, removeEventListener, loadingProgression, isLoaded, sendMessage } = useUnityContext({
         loaderUrl: "Assets/WEBGL.loader.js",
         dataUrl: "Assets/WEBGL.data.unityweb",
         frameworkUrl: "Assets/WEBGL.framework.js.unityweb",
         codeUrl: "Assets/WEBGL.wasm.unityweb",
     });
+
+    // Initialize Firebase when component mounts
+    useEffect(() => {
+        const initFirebase = async () => {
+            const success = await firebaseService.initializeAuth();
+            setFirebaseReady(success);
+
+            if (success) {
+                console.log('Firebase ready for WebGL build');
+                // Notify Unity that Firebase is ready
+                if (isLoaded) {
+                    sendMessage("FirebaseManager", "OnWebFirebaseReady", firebaseService.getUserId() || "");
+                }
+            }
+        };
+
+        initFirebase();
+    }, [isLoaded, sendMessage]);
 
     // VK Haptic feedback functions
     function hapticSoft() {
@@ -83,25 +103,102 @@ function App() {
         }
     }, []);
 
+    // Firebase functions called from Unity
+    const saveRunData = useCallback(async (runDataJson) => {
+        try {
+            const runData = JSON.parse(runDataJson);
+            console.log('Unity requested save:', runData);
+
+            const success = await firebaseService.saveRunToFirebase(runData);
+
+            // Send result back to Unity
+            sendMessage("FirebaseManager", "OnWebFirebaseSaveComplete", success ? "true" : "false");
+
+            return success;
+        } catch (error) {
+            console.error('Failed to save run data:', error);
+            sendMessage("FirebaseManager", "OnWebFirebaseSaveComplete", "false");
+            return false;
+        }
+    }, [sendMessage]);
+
+    const getPlayerStats = useCallback(async () => {
+        try {
+            const stats = await firebaseService.getPlayerStats();
+
+            // Send stats back to Unity as JSON
+            const statsJson = JSON.stringify(stats || {});
+            sendMessage("FirebaseManager", "OnWebFirebaseStatsReceived", statsJson);
+
+            return stats;
+        } catch (error) {
+            console.error('Failed to get player stats:', error);
+            sendMessage("FirebaseManager", "OnWebFirebaseStatsReceived", "{}");
+            return null;
+        }
+    }, [sendMessage]);
+
+    const getFirebaseStatus = useCallback(() => {
+        const status = {
+            isReady: firebaseReady,
+            isAuthenticated: firebaseService.isAuthenticated(),
+            userId: firebaseService.getUserId()
+        };
+
+        sendMessage("FirebaseManager", "OnWebFirebaseStatusReceived", JSON.stringify(status));
+        return status;
+    }, [firebaseReady, sendMessage]);
+
     useEffect(() => {
         // Get user info on component mount
         bridge.send('VKWebAppGetUserInfo')
             .then(user => setUserInfo(user))
             .catch(err => console.error('Failed to get user info:', err));
 
-        // Unity event listeners
+        // Unity event listeners for VK integration
         addEventListener("HapticSoft", handleHapticSoft);
         addEventListener("HapticMedium", handleHapticMedium);
-
-        // You can add more Unity -> VK integrations here
         addEventListener("ShareScore", shareScore);
 
+        // Unity event listeners for Firebase integration
+        addEventListener("SaveRunToFirebase", saveRunData);
+        addEventListener("GetPlayerStats", getPlayerStats);
+        addEventListener("GetFirebaseStatus", getFirebaseStatus);
+
+        // Custom event listeners for WebGL JSLib communication
+        const handleUnitySaveRun = (event) => {
+            saveRunData(event.detail.data);
+        };
+
+        const handleUnityGetStats = () => {
+            getPlayerStats();
+        };
+
+        const handleUnityGetFirebaseStatus = () => {
+            getFirebaseStatus();
+        };
+
+        window.addEventListener('unity-save-run', handleUnitySaveRun);
+        window.addEventListener('unity-get-stats', handleUnityGetStats);
+        window.addEventListener('unity-get-firebase-status', handleUnityGetFirebaseStatus);
+
         return () => {
+            // VK cleanup
             removeEventListener("HapticSoft", handleHapticSoft);
             removeEventListener("HapticMedium", handleHapticMedium);
             removeEventListener("ShareScore", shareScore);
+
+            // Firebase cleanup
+            removeEventListener("SaveRunToFirebase", saveRunData);
+            removeEventListener("GetPlayerStats", getPlayerStats);
+            removeEventListener("GetFirebaseStatus", getFirebaseStatus);
+
+            // Custom events cleanup
+            window.removeEventListener('unity-save-run', handleUnitySaveRun);
+            window.removeEventListener('unity-get-stats', handleUnityGetStats);
+            window.removeEventListener('unity-get-firebase-status', handleUnityGetFirebaseStatus);
         };
-    }, [addEventListener, removeEventListener, handleHapticSoft, handleHapticMedium, shareScore]);
+    }, [addEventListener, removeEventListener, handleHapticSoft, handleHapticMedium, shareScore, saveRunData, getPlayerStats, getFirebaseStatus]);
 
     return (
         <Fragment>
@@ -111,6 +208,7 @@ function App() {
                     <div className="loading-overlay">
                         <div className="loading-spinner"></div>
                         <p>Loading: {Math.round(loadingProgression * 100)}%</p>
+                        {firebaseReady && <p>Firebase Ready</p>}
                     </div>
                 )}
             </div>
