@@ -72,7 +72,26 @@ function App() {
 
         initFirebase();
     }, [isLoaded, sendMessage]);
+    
+    
+    useEffect(() => {
+        async function fetchVKUser() {
+            try {
+                const user = await bridge.send('VKWebAppGetUserInfo');
+                setUserInfo(user);
 
+                // Initialize Firebase with VK user info (instead of anonymous)
+                const success = await firebaseService.initializeAuth(user);
+                setFirebaseReady(success);
+
+                console.log("VK User ID:", user.id);
+            } catch (err) {
+                console.error("Failed to get VK user info:", err);
+            }
+        }
+
+        fetchVKUser();
+    }, []);
     // VK Haptic feedback functions
     function hapticSoft() {
         bridge.send('VKWebAppTapticNotificationOccurred', { type: 'success' })
@@ -199,7 +218,11 @@ function App() {
             window.removeEventListener('unity-get-firebase-status', handleUnityGetFirebaseStatus);
         };
     }, [addEventListener, removeEventListener, handleHapticSoft, handleHapticMedium, shareScore, saveRunData, getPlayerStats, getFirebaseStatus]);
-
+    useEffect(() => {
+        if (userInfo?.id) {
+            window.VK_USER_ID = userInfo.id.toString(); // expose globally
+        }
+    }, [userInfo]);
     return (
         <Fragment>
             <div className="center">
@@ -224,6 +247,13 @@ function App() {
                 devicePixelRatio={window.devicePixelRatio}
                 unityProvider={unityProvider}
             />
+            
+            {userInfo && (
+                <div className="vk-user-info">
+                    <p>VK User ID: {userInfo.id}</p>
+                    <p>{userInfo.first_name} {userInfo.last_name}</p>
+                </div>
+            )}
         </Fragment>
     );
 }

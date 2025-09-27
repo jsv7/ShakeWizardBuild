@@ -2,139 +2,28 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Shake Wizard</title>
+  <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="description" content="Shake Wizard - VK Mini App Game" />
+
+  <!-- VK-specific meta tags -->
+  <meta property="vk:app_id" content="YOUR_VK_APP_ID" />
+  <meta property="og:type" content="vk_app" />
+  <meta property="og:title" content="Shake Wizard" />
+  <meta property="og:description" content="An exciting wizard game for VK Mini Apps" />
+  <meta property="og:image" content="%PUBLIC_URL%/preview-image.png" />
+
+  <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+  <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+
+  <title>Shake Wizard - VK Mini App</title>
 </head>
 <body>
+<noscript>You need to enable JavaScript to run this app.</noscript>
 <div id="root"></div>
 
-<!-- Firebase JavaScript SDK -->
-<script type="module">
-  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-  import { getAuth, signInAnonymously, onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-  import { getFirestore, collection, doc, setDoc, getDocs, query, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
-
-  // Your Firebase configuration
-  const firebaseConfig = {
-    // Add your Firebase config here
-    apiKey: "your-api-key",
-    authDomain: "your-project.firebaseapp.com",
-    projectId: "your-project-id",
-    storageBucket: "your-project.appspot.com",
-    messagingSenderId: "123456789",
-    appId: "your-app-id"
-  };
-
-  // Initialize Firebase
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
-  const db = getFirestore(app);
-
-  let currentUser = null;
-
-  // Create global functions for Unity to call
-  window.FirebaseJS = {
-    isInitialized: false,
-
-    // Initialize Firebase
-    initialize: function() {
-      return new Promise((resolve) => {
-        onAuthStateChanged(auth, (user) => {
-          if (user) {
-            currentUser = user;
-            this.isInitialized = true;
-            console.log("Firebase JS initialized, user:", user.uid);
-            resolve(true);
-          }
-        });
-
-        // Auto sign in anonymously
-        signInAnonymously(auth).catch((error) => {
-          console.error("Anonymous sign-in failed:", error);
-          resolve(false);
-        });
-      });
-    },
-
-    // Get current user ID
-    getCurrentUserId: function() {
-      return currentUser ? currentUser.uid : null;
-    },
-
-    // Check if authenticated
-    isAuthenticated: function() {
-      return currentUser !== null;
-    },
-
-    // Save run data to Firestore
-    saveRunData: function(runDataJson) {
-      return new Promise(async (resolve) => {
-        try {
-          if (!currentUser) {
-            console.error("No authenticated user");
-            resolve(false);
-            return;
-          }
-
-          const runData = JSON.parse(runDataJson);
-
-          // Add timestamp
-          runData.timestamp = serverTimestamp();
-
-          // Create document name based on timestamp
-          const runDocumentName = new Date().toISOString().replace(/[:.]/g, '-');
-
-          // Save to Firestore
-          const docRef = doc(db, 'players', currentUser.uid, 'runs', runDocumentName);
-          await setDoc(docRef, runData);
-
-          console.log("Run data saved successfully:", runDocumentName);
-          resolve(true);
-        } catch (error) {
-          console.error("Error saving run data:", error);
-          resolve(false);
-        }
-      });
-    },
-
-    // Load player runs from Firestore
-    loadPlayerRuns: function(limitCount = 10) {
-      return new Promise(async (resolve) => {
-        try {
-          if (!currentUser) {
-            console.error("No authenticated user");
-            resolve("[]");
-            return;
-          }
-
-          const runsRef = collection(db, 'players', currentUser.uid, 'runs');
-          const q = query(runsRef, orderBy('timestamp', 'desc'), limit(limitCount));
-          const querySnapshot = await getDocs(q);
-
-          const runs = [];
-          querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            runs.push({
-              id: doc.id,
-              ...data,
-              timestamp: data.timestamp ? data.timestamp.toDate().toISOString() : null
-            });
-          });
-
-          console.log("Loaded runs:", runs.length);
-          resolve(JSON.stringify(runs));
-        } catch (error) {
-          console.error("Error loading runs:", error);
-          resolve("[]");
-        }
-      });
-    }
-  };
-
-  // Auto-initialize when page loads
-  window.addEventListener('load', () => {
-    window.FirebaseJS.initialize();
-  });
-</script>
+<!-- VK Bridge script -->
+<script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
 </body>
 </html>
