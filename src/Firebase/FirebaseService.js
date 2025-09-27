@@ -145,13 +145,16 @@ class FirebaseService {
         try {
             console.log('Saving player stats:', statsData);
 
-            // Create the stats data structure to match Unity's nested format
+            // Create the stats data structure with List<MetaUpgradeData>
             const firestoreStatsData = {
                 money: statsData.money || 0,
-                metaUpgrades: statsData.metaUpgrades || {},
+                metaUpgrades: statsData.metaUpgrades || [],
                 lastUpdated: serverTimestamp(),
                 platform: 'WebGL'
             };
+
+            console.log('Prepared Firestore data:', firestoreStatsData);
+            console.log('Meta upgrades count:', firestoreStatsData.metaUpgrades.length);
 
             // Save to the stats field in the user's document (not a separate collection)
             const userDocRef = doc(db, 'players', this.getUserId());
@@ -168,7 +171,7 @@ class FirebaseService {
                 try {
                     const firestoreStatsData = {
                         money: statsData.money || 0,
-                        metaUpgrades: statsData.metaUpgrades || {},
+                        metaUpgrades: statsData.metaUpgrades || [],
                         lastUpdated: serverTimestamp(),
                         platform: 'WebGL'
                     };
