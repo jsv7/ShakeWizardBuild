@@ -1,7 +1,7 @@
 // src/firebase/FirebaseService.js
 import { auth, db } from './config';
 import { signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { doc, setDoc, collection, serverTimestamp, getDocs, query, orderBy, limit, getDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, serverTimestamp, getDocs, query, orderBy, limit, getDoc, updateDoc } from 'firebase/firestore';
 
 class FirebaseService {
     constructor() {
@@ -62,39 +62,30 @@ class FirebaseService {
             this.authMethod = 'anonymous';
             const result = await signInAnonymously(auth);
             this.currentUser = result.user;
-            console.log('Signed in anonymously via React');
+            console.log('Signed in anonymously');
             return true;
         } catch (error) {
-            console.error('Anonymous sign-in failed:', error);
+            console.error('Anonymous authentication failed:', error);
             return false;
         }
     }
 
     async saveVKUserProfile(vkUserInfo) {
-        if (!this.currentUser) return;
-
         try {
-            const userProfileData = {
-                vkUserId: vkUserInfo.id,
-                firstName: vkUserInfo.first_name || '',
-                lastName: vkUserInfo.last_name || '',
-                photoUrl: vkUserInfo.photo_200 || vkUserInfo.photo_100 || '',
-                city: vkUserInfo.city?.title || '',
-                country: vkUserInfo.country?.title || '',
-                sex: vkUserInfo.sex || 0,
-                bdate: vkUserInfo.bdate || '',
-                timezone: vkUserInfo.timezone || 0,
-                language: vkUserInfo.language || 'ru',
-                lastLoginAt: serverTimestamp(),
-                platform: 'WebGL-VK',
+            const userDocRef = doc(db, 'players', this.getUserId());
+
+            const profileData = {
+                vkId: vkUserInfo.id,
+                firstName: vkUserInfo.first_name,
+                lastName: vkUserInfo.last_name,
+                domain: vkUserInfo.domain,
+                photoUrl: vkUserInfo.photo_200,
+                lastLogin: serverTimestamp(),
                 authMethod: 'vk'
             };
 
-            // Save to Firestore using Firebase UID but include VK data
-            const userDocRef = doc(db, 'players', this.getUserId());
-            await setDoc(userDocRef, userProfileData, { merge: true });
-
-            console.log('VK user profile saved to Firestore');
+            await setDoc(userDocRef, { profile: profileData }, { merge: true });
+            console.log('VK user profile saved');
         } catch (error) {
             console.error('Failed to save VK user profile:', error);
         }
@@ -107,28 +98,20 @@ class FirebaseService {
         }
 
         try {
-            // Convert the Unity run data format to Firestore format
+            // Create Firestore-compatible data
             const firestoreData = {
-                score: runData.score || 0,
-                playedTime: runData.playedTime || 0,
+                score: runData.score,
+                playedTime: runData.playedTime,
                 artifactSpells: runData.artifactSpells || [],
                 playerLevel: runData.playerLevel || 1,
                 enemiesKilled: runData.enemiesKilled || 0,
                 upgradeLog: runData.upgradeLog || [],
-                metaUpgrades: runData.metaUpgrades || {},
-                playerChoices: runData.playerChoices || {},
-                gameVersion: runData.gameVersion || "web-build",
                 timestamp: serverTimestamp(),
-                platform: "WebGL",
-                authMethod: this.authMethod,
-                // Add VK user info if available
-                ...(this.vkUser && {
-                    vkUserId: this.vkUser.id,
-                    playerName: `${this.vkUser.first_name} ${this.vkUser.last_name}`.trim()
-                })
+                gameVersion: runData.gameVersion || 'unknown',
+                platform: 'WebGL'
             };
 
-            // Create document name based on timestamp (same format as Unity)
+            // Create timestamped document name
             const now = new Date();
             const year = now.getFullYear();
             const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -152,6 +135,62 @@ class FirebaseService {
         }
     }
 
+    // NEW: Save SOAP stats data (money + metaUpgrades) to Firebase stats field
+    async savePlayerStats(statsData) {
+        if (!this.isInitialized || !this.currentUser) {
+            console.error('Firebase not initialized or user not authenticated');
+            return false;
+        }
+
+        try {
+            console.log('Saving player stats:', statsData);
+
+            // Create the stats data structure to match Unity's nested format
+            const firestoreStatsData = {
+                money: statsData.money || 0,
+                metaUpgrades: statsData.metaUpgrades || {},
+                lastUpdated: serverTimestamp(),
+                platform: 'WebGL'
+            };
+
+            // Save to the stats field in the user's document (not a separate collection)
+            const userDocRef = doc(db, 'players', this.getUserId());
+
+            await updateDoc(userDocRef, {
+                stats: firestoreStatsData
+            });
+
+            console.log('Player stats saved successfully:', firestoreStatsData);
+            return true;
+        } catch (error) {
+            // If document doesn't exist, create it
+            if (error.code === 'not-found') {
+                try {
+                    const firestoreStatsData = {
+                        money: statsData.money || 0,
+                        metaUpgrades: statsData.metaUpgrades || {},
+                        lastUpdated: serverTimestamp(),
+                        platform: 'WebGL'
+                    };
+
+                    const userDocRef = doc(db, 'players', this.getUserId());
+                    await setDoc(userDocRef, {
+                        stats: firestoreStatsData
+                    }, { merge: true });
+
+                    console.log('Player stats document created and saved:', firestoreStatsData);
+                    return true;
+                } catch (createError) {
+                    console.error('Failed to create player stats document:', createError);
+                    return false;
+                }
+            }
+
+            console.error('Failed to save player stats:', error);
+            return false;
+        }
+    }
+
     async getPlayerStats() {
         if (!this.isInitialized || !this.currentUser) {
             console.error('Firebase not initialized or user not authenticated');
@@ -168,7 +207,7 @@ class FirebaseService {
                 runs.push({ id: doc.id, ...doc.data() });
             });
 
-            // Get user profile data
+            // Get user profile data including stats
             const userDocRef = doc(db, 'players', this.getUserId());
             const userDoc = await getDoc(userDocRef);
             const userProfile = userDoc.exists() ? userDoc.data() : {};
@@ -178,6 +217,7 @@ class FirebaseService {
                 recentRuns: runs,
                 bestScore: runs.length > 0 ? Math.max(...runs.map(r => r.score)) : 0,
                 userProfile: userProfile,
+                stats: userProfile.stats || { money: 0, metaUpgrades: {} }, // Include stats data
                 vkUser: this.vkUser
             };
         } catch (error) {
@@ -189,13 +229,13 @@ class FirebaseService {
     getUserId() {
         // Use Firebase UID (which is consistent for anonymous users)
         return this.vkDomain || this.getFirebaseUserID() || 'anonymous';
-
     }
+
     getFirebaseUserID() {
         // Use VK domain if available, fallback to Firebase UID
         return this.currentUser?.uid || null;
-
     }
+
     getVKUserId() {
         // Get the original VK user ID
         return this.vkUser?.id || null;

@@ -72,8 +72,8 @@ function App() {
 
         initFirebase();
     }, [isLoaded, sendMessage]);
-    
-    
+
+
     useEffect(() => {
         async function fetchVKUser() {
             try {
@@ -92,6 +92,7 @@ function App() {
 
         fetchVKUser();
     }, []);
+
     // VK Haptic feedback functions
     function hapticSoft() {
         bridge.send('VKWebAppTapticNotificationOccurred', { type: 'success' })
@@ -137,6 +138,25 @@ function App() {
         } catch (error) {
             console.error('Failed to save run data:', error);
             sendMessage("FirebaseManager", "OnWebFirebaseSaveComplete", "false");
+            return false;
+        }
+    }, [sendMessage]);
+
+    // NEW: Save stats data function for SOAP variables
+    const saveStatsData = useCallback(async (statsDataString) => {
+        try {
+            const statsData = JSON.parse(statsDataString);
+            console.log('Unity requested stats save:', statsData);
+
+            const success = await firebaseService.savePlayerStats(statsData);
+
+            // Send response back to Unity
+            sendMessage("FirebaseManager", "OnWebFirebaseStatsSaveComplete", success ? "true" : "false");
+
+            return success;
+        } catch (error) {
+            console.error('Failed to save stats data:', error);
+            sendMessage("FirebaseManager", "OnWebFirebaseStatsSaveComplete", "false");
             return false;
         }
     }, [sendMessage]);
@@ -197,9 +217,16 @@ function App() {
             getFirebaseStatus();
         };
 
+        // NEW: Handle stats saving from Unity
+        const handleUnitySaveStats = (event) => {
+            saveStatsData(event.detail.data);
+        };
+
+        // Event listeners
         window.addEventListener('unity-save-run', handleUnitySaveRun);
         window.addEventListener('unity-get-stats', handleUnityGetStats);
         window.addEventListener('unity-get-firebase-status', handleUnityGetFirebaseStatus);
+        window.addEventListener('unity-save-stats', handleUnitySaveStats); // NEW
 
         return () => {
             // VK cleanup
@@ -216,13 +243,16 @@ function App() {
             window.removeEventListener('unity-save-run', handleUnitySaveRun);
             window.removeEventListener('unity-get-stats', handleUnityGetStats);
             window.removeEventListener('unity-get-firebase-status', handleUnityGetFirebaseStatus);
+            window.removeEventListener('unity-save-stats', handleUnitySaveStats); // NEW
         };
-    }, [addEventListener, removeEventListener, handleHapticSoft, handleHapticMedium, shareScore, saveRunData, getPlayerStats, getFirebaseStatus]);
+    }, [addEventListener, removeEventListener, handleHapticSoft, handleHapticMedium, shareScore, saveRunData, saveStatsData, getPlayerStats, getFirebaseStatus]);
+
     useEffect(() => {
         if (userInfo?.id) {
             window.VK_USER_ID = userInfo.id.toString(); // expose globally
         }
     }, [userInfo]);
+
     return (
         <Fragment>
             <div className="center">
@@ -247,7 +277,7 @@ function App() {
                 devicePixelRatio={window.devicePixelRatio}
                 unityProvider={unityProvider}
             />
-            
+
             {userInfo && (
                 <div className="vk-user-info">
                     <p>VK User ID: {userInfo.id}</p>
