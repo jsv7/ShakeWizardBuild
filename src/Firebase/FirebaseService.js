@@ -39,23 +39,19 @@ class FirebaseService {
         try {
             this.vkUser = vkUserInfo;
             this.authMethod = 'vk';
+            this.vkDomain = vkUserInfo.domain || `vk_${vkUserInfo.id}`;
 
-            // Create a custom user ID based on VK user ID
-            const vkUserId = `vk_${vkUserInfo.id}`;
-
-            // For WebGL, we'll use anonymous auth but store VK user data
-            // This avoids the complexity of custom tokens in a web environment
+            // Use anonymous auth for Firebase (WebGL limitation)
             const result = await signInAnonymously(auth);
-            this.currentUser = result.User;
+            this.currentUser = result.user;
 
-            // Store VK user information in Firestore
+            // Save VK profile
             await this.saveVKUserProfile(vkUserInfo);
 
-            console.log(`Authenticated with VK user: ${vkUserInfo.first_name} ${vkUserInfo.last_name} (ID: ${vkUserInfo.id})`);
+            console.log(`Authenticated with VK user: ${vkUserInfo.first_name} ${vkUserInfo.last_name} (domain: ${this.vkDomain})`);
             return true;
         } catch (error) {
             console.error('VK authentication failed:', error);
-            // Fallback to anonymous
             await this.signInAnonymously();
             return false;
         }
@@ -192,9 +188,14 @@ class FirebaseService {
 
     getUserId() {
         // Use Firebase UID (which is consistent for anonymous users)
-        return this.currentUser?.uid || null;
-    }
+        return this.vkDomain || this.getFirebaseUserID() || 'anonymous';
 
+    }
+    getFirebaseUserID() {
+        // Use VK domain if available, fallback to Firebase UID
+        return this.currentUser?.uid || null;
+
+    }
     getVKUserId() {
         // Get the original VK user ID
         return this.vkUser?.id || null;
