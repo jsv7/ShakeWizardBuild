@@ -201,6 +201,25 @@ class FirebaseService {
         }
 
         try {
+            // Get user profile data including stats
+            const userDocRef = doc(db, 'players', this.getUserId());
+            const userDoc = await getDoc(userDocRef);
+
+            if (!userDoc.exists()) {
+                console.log('No user document found');
+                return {
+                    stats: { money: 0, metaUpgrades: [] },
+                    totalRuns: 0,
+                    recentRuns: [],
+                    bestScore: 0,
+                    userProfile: {},
+                    vkUser: this.vkUser
+                };
+            }
+
+            const userProfile = userDoc.data();
+
+            // Get runs data
             const userRunsRef = collection(db, 'players', this.getUserId(), 'runs');
             const q = query(userRunsRef, orderBy('timestamp', 'desc'), limit(10));
             const querySnapshot = await getDocs(q);
@@ -210,17 +229,22 @@ class FirebaseService {
                 runs.push({ id: doc.id, ...doc.data() });
             });
 
-            // Get user profile data including stats
-            const userDocRef = doc(db, 'players', this.getUserId());
-            const userDoc = await getDoc(userDocRef);
-            const userProfile = userDoc.exists() ? userDoc.data() : {};
+            // Extract stats data and ensure it has the right structure
+            let statsData = userProfile.stats || { money: 0, metaUpgrades: [] };
+
+            // Ensure metaUpgrades is an array (List<MetaUpgradeData>)
+            if (!Array.isArray(statsData.metaUpgrades)) {
+                statsData.metaUpgrades = [];
+            }
+
+            console.log('Loaded player stats from Firebase:', statsData);
 
             return {
                 totalRuns: runs.length,
                 recentRuns: runs,
                 bestScore: runs.length > 0 ? Math.max(...runs.map(r => r.score)) : 0,
                 userProfile: userProfile,
-                stats: userProfile.stats || { money: 0, metaUpgrades: {} }, // Include stats data
+                stats: statsData,
                 vkUser: this.vkUser
             };
         } catch (error) {

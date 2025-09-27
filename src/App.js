@@ -165,14 +165,21 @@ function App() {
         try {
             const stats = await firebaseService.getPlayerStats();
 
+            // Extract just the stats data for Unity
+            const statsForUnity = stats?.stats || { money: 0, metaUpgrades: [] };
+
+            console.log('Sending stats to Unity:', statsForUnity);
+
             // Send stats back to Unity as JSON
-            const statsJson = JSON.stringify(stats || {});
+            const statsJson = JSON.stringify(statsForUnity);
             sendMessage("FirebaseManager", "OnWebFirebaseStatsReceived", statsJson);
 
             return stats;
         } catch (error) {
             console.error('Failed to get player stats:', error);
-            sendMessage("FirebaseManager", "OnWebFirebaseStatsReceived", "{}");
+            // Send empty stats structure to Unity
+            const emptyStats = { money: 0, metaUpgrades: [] };
+            sendMessage("FirebaseManager", "OnWebFirebaseStatsReceived", JSON.stringify(emptyStats));
             return null;
         }
     }, [sendMessage]);
