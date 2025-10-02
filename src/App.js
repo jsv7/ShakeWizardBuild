@@ -142,15 +142,13 @@ function App() {
         }
     }, [sendMessage]);
 
-    // NEW: Save stats data function for SOAP variables
     const saveStatsData = useCallback(async (statsDataString) => {
         try {
-            const statsData = JSON.parse(statsDataString);
+            const statsData = JSON.parse(statsDataString); // Contains money, metaUpgrades, AND artifacts
             console.log('Unity requested stats save:', statsData);
 
             const success = await firebaseService.savePlayerStats(statsData);
 
-            // Send response back to Unity
             sendMessage("FirebaseManager", "OnWebFirebaseStatsSaveComplete", success ? "true" : "false");
 
             return success;
@@ -161,24 +159,31 @@ function App() {
         }
     }, [sendMessage]);
 
+// This already handles artifacts because it returns the entire stats object
     const getPlayerStats = useCallback(async () => {
         try {
             const stats = await firebaseService.getPlayerStats();
 
-            // Extract just the stats data for Unity
-            const statsForUnity = stats?.stats || { money: 0, metaUpgrades: [] };
+            // Extract just the stats data for Unity (includes money, metaUpgrades, AND artifacts)
+            const statsForUnity = stats?.stats || {
+                money: 0,
+                metaUpgrades: [],
+                artifacts: [] // Already included in the stats object
+            };
 
             console.log('Sending stats to Unity:', statsForUnity);
 
-            // Send stats back to Unity as JSON
             const statsJson = JSON.stringify(statsForUnity);
             sendMessage("FirebaseManager", "OnWebFirebaseStatsReceived", statsJson);
 
             return stats;
         } catch (error) {
             console.error('Failed to get player stats:', error);
-            // Send empty stats structure to Unity
-            const emptyStats = { money: 0, metaUpgrades: [] };
+            const emptyStats = {
+                money: 0,
+                metaUpgrades: [],
+                artifacts: [] // Include empty artifacts array
+            };
             sendMessage("FirebaseManager", "OnWebFirebaseStatsReceived", JSON.stringify(emptyStats));
             return null;
         }
@@ -194,6 +199,138 @@ function App() {
         sendMessage("FirebaseManager", "OnWebFirebaseStatusReceived", JSON.stringify(status));
         return status;
     }, [firebaseReady, sendMessage]);
+
+    // VK Ads: Show rewarded ad for revival
+    const showRewardedAd = useCallback(async () => {
+        try {
+            console.log('========== SHOWING VK REWARDED AD ==========');
+            console.log('Current URL:', window.location.href);
+            console.log('Hostname:', window.location.hostname);
+
+            // Development mode detection (only localhost, NOT vk-apps.com staging)
+            const isDevelopment = window.location.hostname === 'localhost' ||
+                window.location.hostname === '127.0.0.1';
+
+            if (isDevelopment) {
+                console.log('⚠️ Development mode detected - simulating ad success in 2 seconds');
+                console.log('Note: Real VK ads only work in production VK Mini App');
+
+                // Simulate ad watching delay
+                setTimeout(() => {
+                    console.log('✅ [DEV MODE] Simulated ad watched successfully!');
+                    sendMessage("VKAdsManager", "OnAdWatchSuccess", "");
+                }, 2000);
+
+                return;
+            }
+
+            // Production mode - use real VK ads
+            console.log('🎯 Production mode - attempting to show real VK ad');
+
+            // Method 1: Check ad availability
+            console.log('Step 1: Checking ad availability...');
+            let adsAvailable;
+            try {
+                adsAvailable = await bridge.send('VKWebAppCheckNativeAds', {
+                    ad_format: 'reward'
+                });
+                console.log('Ad availability response:', adsAvailable);
+            } catch (checkError) {
+                console.error('❌ Failed to check ad availability:', checkError);
+                console.log('Trying to show ad anyway...');
+            }
+
+            if (adsAvailable && !adsAvailable.result) {
+                console.log('⚠️ Ads reported as not available');
+                console.log('Full response:', JSON.stringify(adsAvailable));
+                console.log('Possible reasons:');
+                console.log('- App not approved for ads in VK settings');
+                console.log('- Ads not enabled in VK Developer settings');
+                console.log('- User has premium VK account (no ads)');
+                console.log('- Region restrictions');
+
+                sendMessage("VKAdsManager", "OnAdWatchFailed", "Ads not available in VK settings");
+                return;
+            }
+
+            // Method 2: Show the ad
+            console.log('Step 2: Showing rewarded ad...');
+            const result = await bridge.send('VKWebAppShowNativeAds', {
+                ad_format: 'reward'
+            });
+
+            console.log('Ad show result:', result);
+            console.log('Full result object:', JSON.stringify(result));
+
+            if (result && result.result === true) {
+                // Ad was watched successfully
+                console.log('✅ Ad watched successfully!');
+                sendMessage("VKAdsManager", "OnAdWatchSuccess", "");
+            } else {
+                // Ad failed or was skipped
+                console.log('⚠️ Ad was not watched or failed');
+                console.log('Result details:', result);
+                sendMessage("VKAdsManager", "OnAdWatchFailed", "User cancelled or ad failed");
+            }
+
+            console.log('========== END AD ATTEMPT ==========');
+
+        } catch (error) {
+            console.error('❌ VK Ad error:', error);
+            console.error('Error details:', {
+                message: error.message,
+                code: error.error_code,
+                data: error.error_data
+            });
+            sendMessage("VKAdsManager", "OnAdWatchFailed", error.message || "Unknown error");
+        }
+    }, [sendMessage]);
+
+    // VK Ads: Check if ads are available
+    const checkAdAvailability = useCallback(async () => {
+        try {
+            console.log('========== CHECKING AD AVAILABILITY ==========');
+            console.log('Current URL:', window.location.href);
+            console.log('Hostname:', window.location.hostname);
+            console.log('VK User ID:', userInfo?.id);
+
+            const result = await bridge.send('VKWebAppCheckNativeAds', {
+                ad_format: 'reward'
+            });
+
+            console.log('Raw VK response:', JSON.stringify(result, null, 2));
+
+            const isAvailable = result.result || false;
+            console.log('Ad availability result:', isAvailable);
+
+            if (!isAvailable && result.error_type) {
+                console.error('Error type:', result.error_type);
+                console.error('Error data:', result.error_data);
+            }
+
+            // Additional diagnostics
+            if (!isAvailable) {
+                console.log('⚠️ TROUBLESHOOTING INFO:');
+                console.log('1. Is your app published in VK?');
+                console.log('2. Is monetization enabled in dev.vk.com settings?');
+                console.log('3. Does your app have enough MAU (Monthly Active Users)?');
+                console.log('4. Are you testing from supported region (Russia)?');
+                console.log('5. Contact miniapps@vk.com to request ad access');
+            }
+
+            sendMessage("VKAdsManager", "OnAdAvailabilityResult", isAvailable ? "true" : "false");
+            console.log('========== END AD AVAILABILITY CHECK ==========');
+
+        } catch (error) {
+            console.error('❌ Failed to check ad availability:', error);
+            console.error('Error details:', {
+                message: error.message,
+                code: error.error_code,
+                type: error.error_type
+            });
+            sendMessage("VKAdsManager", "OnAdAvailabilityResult", "false");
+        }
+    }, [sendMessage, userInfo]);
 
     useEffect(() => {
         // Get user info on component mount
@@ -224,16 +361,28 @@ function App() {
             getFirebaseStatus();
         };
 
-        // NEW: Handle stats saving from Unity
+        // Handle stats saving from Unity
         const handleUnitySaveStats = (event) => {
             saveStatsData(event.detail.data);
+        };
+
+        // Handle rewarded ad request from Unity
+        const handleUnityShowRewardedAd = () => {
+            showRewardedAd();
+        };
+
+        // Handle ad availability check from Unity
+        const handleUnityCheckAdAvailability = () => {
+            checkAdAvailability();
         };
 
         // Event listeners
         window.addEventListener('unity-save-run', handleUnitySaveRun);
         window.addEventListener('unity-get-stats', handleUnityGetStats);
         window.addEventListener('unity-get-firebase-status', handleUnityGetFirebaseStatus);
-        window.addEventListener('unity-save-stats', handleUnitySaveStats); // NEW
+        window.addEventListener('unity-save-stats', handleUnitySaveStats);
+        window.addEventListener('unity-show-rewarded-ad', handleUnityShowRewardedAd);
+        window.addEventListener('unity-check-ad-availability', handleUnityCheckAdAvailability);
 
         return () => {
             // VK cleanup
@@ -250,9 +399,11 @@ function App() {
             window.removeEventListener('unity-save-run', handleUnitySaveRun);
             window.removeEventListener('unity-get-stats', handleUnityGetStats);
             window.removeEventListener('unity-get-firebase-status', handleUnityGetFirebaseStatus);
-            window.removeEventListener('unity-save-stats', handleUnitySaveStats); // NEW
+            window.removeEventListener('unity-save-stats', handleUnitySaveStats);
+            window.removeEventListener('unity-show-rewarded-ad', handleUnityShowRewardedAd);
+            window.removeEventListener('unity-check-ad-availability', handleUnityCheckAdAvailability);
         };
-    }, [addEventListener, removeEventListener, handleHapticSoft, handleHapticMedium, shareScore, saveRunData, saveStatsData, getPlayerStats, getFirebaseStatus]);
+    }, [addEventListener, removeEventListener, handleHapticSoft, handleHapticMedium, shareScore, saveRunData, saveStatsData, getPlayerStats, getFirebaseStatus, showRewardedAd, checkAdAvailability]);
 
     useEffect(() => {
         if (userInfo?.id) {

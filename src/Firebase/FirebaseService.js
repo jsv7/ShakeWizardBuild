@@ -102,7 +102,7 @@ class FirebaseService {
             const firestoreData = {
                 score: runData.score,
                 playedTime: runData.playedTime,
-                artifactSpells: runData.artifactSpells || [],
+                artifactRuns: runData.artifactRuns || [],
                 playerLevel: runData.playerLevel || 1,
                 enemiesKilled: runData.enemiesKilled || 0,
                 upgradeLog: runData.upgradeLog || [],
@@ -145,16 +145,18 @@ class FirebaseService {
         try {
             console.log('Saving player stats:', statsData);
 
-            // Create the stats data structure with List<MetaUpgradeData>
+            // Create the stats data structure with artifacts
             const firestoreStatsData = {
                 money: statsData.money || 0,
                 metaUpgrades: statsData.metaUpgrades || [],
+                artifacts: statsData.artifacts || [], // ← NEW
                 lastUpdated: serverTimestamp(),
                 platform: 'WebGL'
             };
 
             console.log('Prepared Firestore data:', firestoreStatsData);
             console.log('Meta upgrades count:', firestoreStatsData.metaUpgrades.length);
+            console.log('Artifacts count:', firestoreStatsData.artifacts.length); // ← NEW
 
             // Save to the stats field in the user's document (not a separate collection)
             const userDocRef = doc(db, 'players', this.getUserId());
@@ -172,6 +174,7 @@ class FirebaseService {
                     const firestoreStatsData = {
                         money: statsData.money || 0,
                         metaUpgrades: statsData.metaUpgrades || [],
+                        artifacts: statsData.artifacts || [], // ← NEW
                         lastUpdated: serverTimestamp(),
                         platform: 'WebGL'
                     };
@@ -208,7 +211,11 @@ class FirebaseService {
             if (!userDoc.exists()) {
                 console.log('No user document found');
                 return {
-                    stats: { money: 0, metaUpgrades: [] },
+                    stats: {
+                        money: 0,
+                        metaUpgrades: [],
+                        artifacts: [] // ← NEW
+                    },
                     totalRuns: 0,
                     recentRuns: [],
                     bestScore: 0,
@@ -230,14 +237,24 @@ class FirebaseService {
             });
 
             // Extract stats data and ensure it has the right structure
-            let statsData = userProfile.stats || { money: 0, metaUpgrades: [] };
+            let statsData = userProfile.stats || {
+                money: 0,
+                metaUpgrades: [],
+                artifacts: [] // ← NEW
+            };
 
             // Ensure metaUpgrades is an array (List<MetaUpgradeData>)
             if (!Array.isArray(statsData.metaUpgrades)) {
                 statsData.metaUpgrades = [];
             }
 
+            // NEW: Ensure artifacts is an array (List<ArtifactDataForFirebase>)
+            if (!Array.isArray(statsData.artifacts)) {
+                statsData.artifacts = [];
+            }
+
             console.log('Loaded player stats from Firebase:', statsData);
+            console.log('Artifacts loaded:', statsData.artifacts.length); // ← NEW
 
             return {
                 totalRuns: runs.length,
