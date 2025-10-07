@@ -435,13 +435,6 @@ function App() {
                 devicePixelRatio={window.devicePixelRatio}
                 unityProvider={unityProvider}
             />
-
-            {userInfo && (
-                <div className="vk-user-info">
-                    <p>VK User ID: {userInfo.id}</p>
-                    <p>{userInfo.first_name} {userInfo.last_name}</p>
-                </div>
-            )}
         </Fragment>
     );
 }
